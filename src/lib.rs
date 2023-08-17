@@ -17,19 +17,18 @@ impl<'a> Cursor<'a> {
 
     fn consume(&mut self) -> Option<char> {
         let c = self.peek()?;
-        self.pos += 1;
+        self.pos += c.len_utf8();
         Some(c)
     }
 
     fn consume_n_chars(&mut self, n: usize) -> Option<&'a str> {
         let old_pos = self.pos;
-        self.pos += n;
 
-        if self.pos > self.data.len() {
-            None
-        } else {
-            Some(&self.data[old_pos..self.pos])
+        for _ in 0..n {
+            self.consume()?;
         }
+
+        Some(&self.data[old_pos..self.pos])
     }
 
     fn skip_whitespaces(&mut self) {
