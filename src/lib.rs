@@ -1,5 +1,7 @@
 //! This is a basic JSON parser to demonstrate how fuzz testing works.
 
+mod test;
+
 #[derive(Debug, Clone, Copy)]
 struct Cursor<'a> {
     data: &'a str,
@@ -58,7 +60,7 @@ impl<'a> Cursor<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum JsonType {
     Null,
     Bool(bool),
@@ -68,13 +70,13 @@ pub enum JsonType {
     Object(Vec<(String, JsonType)>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct JsonParseError {
     pub kind: JsonParseErrorKind,
     pub pos: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum JsonParseErrorKind {
     UnexpectedChar(char),
     UnexpectedEnd,
@@ -103,7 +105,7 @@ fn parse_value(cursor: &mut Cursor) -> Result<JsonType, JsonParseError> {
         .peek()
         .ok_or_else(|| cursor.create_error(JsonParseErrorKind::UnexpectedEnd))?;
 
-    let _large_stack_obj = [0; 100000];
+    let _large_stack_obj = [0; 50000];
     std::hint::black_box(_large_stack_obj);
 
     if next_char == '"' {
@@ -234,15 +236,27 @@ fn parse_object(cursor: &mut Cursor) -> Result<JsonType, JsonParseError> {
             }
         }
 
-        let key = match parse_string(cursor)? {
-            JsonType::String(s) => s,
-            _ => return Err(cursor.create_error(JsonParseErrorKind::UnexpectedChar('"'))),
+        let key = if let Some(c) = cursor.peek() {
+            if c != '"' {
+                return Err(cursor.create_error(JsonParseErrorKind::UnexpectedChar(c)));
+            }
+
+            match parse_string(cursor)? {
+                JsonType::String(s) => s,
+                _ => unreachable!(),
+            }
+        } else {
+            return Err(cursor.create_error(JsonParseErrorKind::UnexpectedEnd));
         };
 
         cursor.skip_whitespaces();
 
         if cursor.consume_str(":").is_none() {
-            return Err(cursor.create_error(JsonParseErrorKind::UnexpectedChar(':')));
+            if let Some(c) = cursor.peek() {
+                return Err(cursor.create_error(JsonParseErrorKind::UnexpectedChar(c)));
+            } else {
+                return Err(cursor.create_error(JsonParseErrorKind::UnexpectedEnd));
+            }
         }
 
         cursor.skip_whitespaces();
